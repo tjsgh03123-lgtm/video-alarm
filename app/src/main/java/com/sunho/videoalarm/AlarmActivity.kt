@@ -150,11 +150,14 @@ class AlarmActivity : Activity() {
 
     override fun onStart() {
         super.onStart()
+        handler.removeCallbacks(volumeKeeper)
+        handler.post(volumeKeeper)
         if (phase == 1 && !errorShown) startPlayback()
     }
 
     override fun onStop() {
         super.onStop()
+        handler.removeCallbacks(volumeKeeper)
         if (!isFinishing && phase == 1 && !errorShown) {
             stopPlayback()
             if (!test) Ringer.start(this)
@@ -191,16 +194,22 @@ class AlarmActivity : Activity() {
     }
 
     private fun boostVolume() {
-        val am = getSystemService(AudioManager::class.java)
-        val aMax = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
-        if (am.getStreamVolume(AudioManager.STREAM_ALARM) < aMax * 0.8) {
-            am.setStreamVolume(AudioManager.STREAM_ALARM, (aMax * 0.8).toInt(), 0)
-        }
-        if (mode == "youtube") {
-            val mMax = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-            if (am.getStreamVolume(AudioManager.STREAM_MUSIC) < mMax * 0.6) {
-                am.setStreamVolume(AudioManager.STREAM_MUSIC, (mMax * 0.6).toInt(), 0)
+        try {
+            val am = getSystemService(AudioManager::class.java)
+            for (st in intArrayOf(AudioManager.STREAM_ALARM, AudioManager.STREAM_MUSIC)) {
+                val max = am.getStreamMaxVolume(st)
+                if (am.getStreamVolume(st) != max) am.setStreamVolume(st, max, 0)
             }
+        } catch (e: Exception) {
+            CrashLog.record(this, "볼륨", e)
+        }
+    }
+
+    // 볼륨 버튼으로 줄여도 계속 최대로 되돌린다
+    private val volumeKeeper = object : Runnable {
+        override fun run() {
+            boostVolume()
+            handler.postDelayed(this, 700L)
         }
     }
 
