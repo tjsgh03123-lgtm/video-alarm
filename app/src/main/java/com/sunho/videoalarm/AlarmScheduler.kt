@@ -48,7 +48,12 @@ object AlarmScheduler {
             c, 0, Intent(c, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        am.setAlarmClock(AlarmManager.AlarmClockInfo(t, show), pi)
+        try {
+            am.setAlarmClock(AlarmManager.AlarmClockInfo(t, show), pi)
+        } catch (e: SecurityException) {
+            CrashLog.record(c, "알람 예약 실패", e)
+            return -1
+        }
         return t
     }
 
