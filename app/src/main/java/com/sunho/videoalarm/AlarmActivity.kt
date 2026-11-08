@@ -256,6 +256,34 @@ class AlarmActivity : Activity() {
         }
     }
 
+    private val bindJs = """
+        (function(){
+          if(!document.getElementById('va_css')){
+            var st=document.createElement('style'); st.id='va_css';
+            st.textContent='html,body{background:#000!important;overflow:hidden!important}'+
+              'video{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;z-index:2147483647!important;background:#000!important;object-fit:contain!important}';
+            document.head.appendChild(st);
+          }
+          var v=document.querySelector('video');
+          if(!v) return;
+          if(!v.__va){
+            v.__va=1;
+            v.addEventListener('playing',function(){Android.playing();});
+            v.addEventListener('ended',function(){
+              if(!document.querySelector('.ad-showing')) Android.ended();
+            });
+          }
+          if(v.paused && !v.ended){ v.muted=false; var p=v.play(); if(p&&p.catch)p.catch(function(){}); }
+        })();
+    """.trimIndent()
+
+    private val pollJs = object : Runnable {
+        override fun run() {
+            web?.evaluateJavascript(bindJs, null)
+            handler.postDelayed(this, 1000L)
+        }
+    }
+
     private fun playYoutube() {
         val id = extractYoutubeId(youtubeUrl)
         if (id == null) {
@@ -266,9 +294,16 @@ class AlarmActivity : Activity() {
         w.settings.javaScriptEnabled = true
         w.settings.domStorageEnabled = true
         w.settings.mediaPlaybackRequiresUserGesture = false
+        w.settings.userAgentString =
+            "Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
         w.setBackgroundColor(Color.BLACK)
         w.webChromeClient = WebChromeClient()
-        w.webViewClient = WebViewClient()
+        w.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(view: WebView?, request: android.webkit.WebResourceRequest?): Boolean {
+                val u = request?.url?.toString() ?: return true
+                return !(u.startsWith("http://") || u.startsWith("https://"))
+            }
+        }
         w.setOnTouchListener { _, _ -> true } // 터치로 일시정지/건너뛰기 방지
         w.setOnLongClickListener { true }
         w.addJavascriptInterface(Bridge(), "Android")
@@ -280,27 +315,8 @@ class AlarmActivity : Activity() {
             )
         )
         web = w
-        val html = """
-            <html><head><meta name="viewport" content="width=device-width,initial-scale=1">
-            <style>html,body{margin:0;height:100%;background:#000;overflow:hidden}#p{width:100vw;height:100vh}</style></head>
-            <body><div id="p"></div>
-            <script src="https://www.youtube.com/iframe_api"></script>
-            <script>
-            function onYouTubeIframeAPIReady(){
-              new YT.Player('p',{width:'100%',height:'100%',videoId:'$id',
-                playerVars:{autoplay:1,controls:0,playsinline:1,rel:0,fs:0,disablekb:1,modestbranding:1,origin:'https://www.youtube.com'},
-                events:{
-                  onReady:function(e){e.target.playVideo();},
-                  onStateChange:function(e){
-                    if(e.data==1) Android.playing();
-                    if(e.data==0) Android.ended();
-                  },
-                  onError:function(e){Android.error(e.data);}
-                }});
-            }
-            </script></body></html>
-        """.trimIndent()
-        w.loadDataWithBaseURL("https://www.youtube.com", html, "text/html", "utf-8", null)
+        w.loadUrl("https://m.youtube.com/watch?v=$id")
+        handler.postDelayed(pollJs, 1000L)
     }
 
     private fun markPlaying() {
@@ -311,6 +327,7 @@ class AlarmActivity : Activity() {
 
     private fun stopPlayback() {
         handler.removeCallbacks(startTimeout)
+        handler.removeCallbacks(pollJs)
         videoView?.let {
             it.stopPlayback()
             container.removeView(it)

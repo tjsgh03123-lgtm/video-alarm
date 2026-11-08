@@ -10,6 +10,7 @@ import android.provider.OpenableColumns
 import android.text.format.DateFormat
 import android.view.Gravity
 import android.widget.EditText
+import android.widget.NumberPicker
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -18,7 +19,6 @@ import android.widget.Toast
 class AlarmEditActivity : Activity() {
     private lateinit var alarm: Alarm
     private var isNew = false
-    private lateinit var timeText: TextView
     private lateinit var videoText: TextView
     private lateinit var labelEdit: EditText
     private lateinit var clearBtn: android.widget.Button
@@ -40,12 +40,34 @@ class AlarmEditActivity : Activity() {
         }
         root.addView(Ui.label(this, if (isNew) "알람 추가" else "알람 편집", 24f, Ui.ACCENT))
 
-        timeText = Ui.label(this, "", 56f).apply {
+        fun picker(min: Int, max: Int, names: Array<String>?, value: Int, wrap: Boolean, onChange: (Int) -> Unit) =
+            NumberPicker(this).apply {
+                minValue = min
+                maxValue = max
+                if (names != null) displayedValues = names
+                this.value = value
+                wrapSelectorWheel = wrap
+                descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                if (android.os.Build.VERSION.SDK_INT >= 29) textSize = 24f * resources.displayMetrics.scaledDensity
+                setOnValueChangedListener { _, _, n -> onChange(n) }
+            }
+        var ap = alarm.hour / 12
+        var hIdx = alarm.hour % 12
+        val wheels = LinearLayout(this).apply {
             gravity = Gravity.CENTER
-            setPadding(0, dp(24), 0, dp(8))
-            setOnClickListener { pickTime() }
+            setPadding(0, dp(20), 0, dp(8))
         }
-        root.addView(timeText)
+        val lp = { LinearLayout.LayoutParams(dp(90), dp(160)).apply { marginStart = dp(6); marginEnd = dp(6) } }
+        wheels.addView(
+            picker(0, 1, arrayOf("오전", "오후"), ap, false) { ap = it; alarm.hour = ap * 12 + hIdx }, lp()
+        )
+        wheels.addView(
+            picker(0, 11, Array(12) { if (it == 0) "12" else "$it" }, hIdx, true) { hIdx = it; alarm.hour = ap * 12 + hIdx }, lp()
+        )
+        wheels.addView(
+            picker(0, 59, Array(60) { String.format("%02d", it) }, alarm.minute, true) { alarm.minute = it }, lp()
+        )
+        root.addView(wheels)
 
         val row = LinearLayout(this).apply { setPadding(0, dp(12), 0, dp(4)) }
         listOf("월", "화", "수", "목", "금", "토", "일").forEachIndexed { i, n ->
@@ -142,11 +164,9 @@ class AlarmEditActivity : Activity() {
             addView(root)
         })
         refresh()
-        if (isNew) pickTime()
     }
 
     private fun refresh() {
-        timeText.text = Ui.ampm(alarm.hour) + " " + Ui.hm(alarm.hour, alarm.minute)
         dayViews.forEachIndexed { i, tv ->
             val on = (alarm.days and (1 shl i)) != 0
             tv.background = Ui.rounded(this, if (on) Ui.ACCENT else Ui.CARD, 24)
@@ -154,18 +174,6 @@ class AlarmEditActivity : Activity() {
         }
         videoText.text = if (alarm.mode.isEmpty()) "영상 없음 (소리만 울려요)" else alarm.videoLabel()
         clearBtn.visibility = if (alarm.mode.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
-    }
-
-    private fun pickTime() {
-        TimePickerDialog(
-            this,
-            { _, h, m ->
-                alarm.hour = h
-                alarm.minute = m
-                refresh()
-            },
-            alarm.hour, alarm.minute, DateFormat.is24HourFormat(this)
-        ).show()
     }
 
     private fun save() {
