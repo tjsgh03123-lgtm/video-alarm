@@ -273,6 +273,10 @@ class AlarmActivity : Activity() {
               if(!document.querySelector('.ad-showing')) Android.ended();
             });
           }
+          var mp=document.getElementById('movie_player');
+          if(mp && mp.isMuted && mp.isMuted()){ try{ mp.unMute(); mp.setVolume(100); }catch(e){} }
+          if(v.muted){ v.muted=false; }
+          if(v.volume<1){ v.volume=1; }
           if(v.paused && !v.ended){ v.muted=false; var p=v.play(); if(p&&p.catch)p.catch(function(){}); }
         })();
     """.trimIndent()
